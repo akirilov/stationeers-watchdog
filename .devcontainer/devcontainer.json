@@ -35,7 +35,8 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"eamodio.gitlens"
+				"eamodio.gitlens",
+				"supermaven.supermaven"
 			]
 		}
 	}
