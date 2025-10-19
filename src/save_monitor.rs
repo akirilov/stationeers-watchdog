@@ -2,14 +2,16 @@ use quick_xml::{events::Event, Reader};
 use std::cmp::Ordering;
 use std::error;
 use std::fs::File;
+use std::hash::Hash;
 use tempfile::tempdir;
 use zip::ZipArchive;
 use conv::ValueFrom;
+use std::collections::HashMap;
 
 const WORLD_META_XML: &str = "world_meta.xml";
 const WORLD_XML: &str = "world.xml";
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct WorldStats {
     pub date_time: usize,
     pub total_things: usize,
@@ -19,19 +21,8 @@ pub struct WorldStats {
     pub total_atmospheres: usize,
     pub total_damage: f64,
     pub players: Vec<String>,
+    pub type_map: HashMap<String, usize>,
     pub filename: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct WorldStatsDiff {
-    pub date_time: usize,
-    pub total_things: f64,
-    pub total_rooms: f64,
-    pub total_pipe_networks: f64,
-    pub total_cable_networks: f64,
-    pub total_atmospheres: f64,
-    pub total_damage: f64,
-    pub players: Vec<String>,
 }
 
 impl WorldStats {
@@ -45,36 +36,52 @@ impl WorldStats {
             total_atmospheres: 0,
             total_damage: 0.0,
             players: Vec::new(),
+            type_map: HashMap::new(),
             filename: filename,
         }
     }
 
     pub fn diff(&self, other: &WorldStats) -> Result<WorldStatsDiff> {
-        let mut players_diff = Vec::new();
+        let mut result = WorldStatsDiff {
+            date_time: self.date_time - other.date_time,
+            total_things: isize::value_from(self.total_things)? - isize::value_from(other.total_things)?,
+            total_rooms: isize::value_from(self.total_rooms)? - isize::value_from(other.total_rooms)?,
+            total_pipe_networks: isize::value_from(self.total_pipe_networks)? - isize::value_from(other.total_pipe_networks)?,
+            total_cable_networks: isize::value_from(self.total_cable_networks)? - isize::value_from(other.total_cable_networks)?,
+            total_atmospheres: isize::value_from(self.total_atmospheres)? - isize::value_from(other.total_atmospheres)?,
+            total_damage: self.total_damage - other.total_damage,
+            players: Vec::new(),
+            type_map: HashMap::new(),
+        };
+        // Identify new players
         for sp in self.players.iter() {
             if !other.players.contains(sp) {
-                players_diff.push(sp.clone());
+                result.players.push(sp.clone());
             }
         }
-        Ok(WorldStatsDiff {
-            date_time: self.date_time - other.date_time,
-            total_things: (f64::value_from(self.total_things)? - f64::value_from(other.total_things)?) / f64::value_from(self.total_things)?,
-            total_rooms: (f64::value_from(self.total_rooms)? - f64::value_from(other.total_rooms)?) / f64::value_from(self.total_rooms)?,
-            total_pipe_networks: (f64::value_from(self.total_pipe_networks)? - f64::value_from(other.total_pipe_networks)?) / f64::value_from(self.total_pipe_networks)?,
-            total_cable_networks: (f64::value_from(self.total_cable_networks)? - f64::value_from(other.total_cable_networks)?) / f64::value_from(self.total_cable_networks)?,
-            total_atmospheres: (f64::value_from(self.total_atmospheres)? - f64::value_from(other.total_atmospheres)?) / f64::value_from(self.total_atmospheres)?,
-            total_damage: (self.total_damage - other.total_damage) / self.total_damage,
-            players: players_diff
-        })
+        // Identify types that went down in count
+        for (key, value) in self.type_map.iter() {
+            if let Some(other_value) = other.type_map.get(key) {
+                if *value < *other_value {
+                    result.type_map.insert(key.clone(), isize::value_from(*value)? - isize::value_from(*other_value)?);
+                }
+            }
+        }
+        Ok(result)
     }
 }
 
-impl Eq for WorldStats {}
-
-impl Ord for WorldStats {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.date_time.cmp(&other.date_time)
-    }
+#[derive(Debug, Clone)]
+pub struct WorldStatsDiff {
+    pub date_time: usize,
+    pub total_things: isize,
+    pub total_rooms: isize,
+    pub total_pipe_networks: isize,
+    pub total_cable_networks: isize,
+    pub total_atmospheres: isize,
+    pub total_damage: f64,
+    pub players: Vec<String>,
+    pub type_map: HashMap<String, isize>,
 }
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
@@ -150,7 +157,21 @@ pub fn parse_save_file(path: &str) -> Result<WorldStats> {
                         damage_state = true;
                     }
                     // Look for players
-                    let attributes = String::from_utf8(e.attributes_raw().to_vec())?;
+                    let attributes = String::from_utf8(e.attributes_raw().to_vec())?.trim().to_owned();
+                    if !attributes.is_empty() && attributes.starts_with("xsi:type") {
+                        // Strip the xsi:type attribute and grab the type name
+                        let item_type = attributes.split('"').nth(1);
+                        if (item_type.is_none()) {
+                            return Err("Error parsing xsi:type attribute".into());
+                        }
+                        let item_type = item_type.unwrap().to_owned();
+                        // Increment the type count in the type map, or inserting if it doesn't exist already
+                        if let Some(count) = world_stats.type_map.get_mut(&item_type) {
+                            *count += 1;
+                        } else {
+                            world_stats.type_map.insert(item_type.clone(), 1);
+                        }
+                    }
                     if attributes.contains("HumanSaveData") {
                         get_player_name = true; // Set a flag to grab the next "CustomName" tag
                     }
