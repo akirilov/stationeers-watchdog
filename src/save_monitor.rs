@@ -3,8 +3,8 @@ use quick_xml::{Reader, events::Event};
 use std::collections::HashMap;
 use std::error;
 use std::fs::File;
-use zip::ZipArchive;
 use tempfile::tempdir;
+use zip::ZipArchive;
 
 const WORLD_META_XML: &str = "world_meta.xml";
 const WORLD_XML: &str = "world.xml";
@@ -55,6 +55,8 @@ impl WorldStats {
             total_damage: self.total_damage - other.total_damage,
             players: Vec::new(),
             type_map: HashMap::new(),
+            new_filename: self.filename.clone(),
+            old_filename: other.filename.clone(),
         };
         // Identify new players
         for sp in self.players.iter() {
@@ -89,6 +91,8 @@ pub struct WorldStatsDiff {
     pub total_damage: f64,
     pub players: Vec<String>,
     pub type_map: HashMap<String, isize>,
+    pub old_filename: String,
+    pub new_filename: String,
 }
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error + Send + Sync>>;
@@ -163,7 +167,7 @@ pub fn parse_save_file(path: &str) -> Result<WorldStats> {
                     let text = String::from_utf8(Vec::from(e.local_name().into_inner()))?;
                     // Look for damage
                     if &text == "DamageState" {
-                        damage_state = true;
+                        damage_state = true; // Set the DamageState flag when we see the tag so we can collect all the damage values
                     }
                     // Look for players
                     let attributes = String::from_utf8(e.attributes_raw().to_vec())?
@@ -191,7 +195,7 @@ pub fn parse_save_file(path: &str) -> Result<WorldStats> {
                 Ok(Event::End(_)) => {
                     let text = path_stack.pop();
                     if text.is_some() && text.unwrap() == "DamageState" {
-                        damage_state = false;
+                        damage_state = false; // Clear DamageSate flag when we finish parsing that tag
                     }
                 }
                 Ok(Event::Text(e)) => {
