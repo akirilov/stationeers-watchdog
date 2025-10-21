@@ -1,9 +1,8 @@
 use conv::ValueFrom;
-use quick_xml::{events::Event, Reader};
+use quick_xml::{Reader, events::Event};
 use std::collections::HashMap;
 use std::error;
 use std::fs::File;
-use tempfile::tempdir;
 use zip::ZipArchive;
 
 const WORLD_META_XML: &str = "world_meta.xml";
@@ -91,11 +90,11 @@ pub struct WorldStatsDiff {
     pub type_map: HashMap<String, isize>,
 }
 
-pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+pub type Result<T> = std::result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
 pub fn parse_save_file(path: &str) -> Result<WorldStats> {
     // Create a temporary directory and extract the zip file
-    let temp_dir = tempdir()?;
+    let temp_dir = tempfile::tempdir()?;
     ZipArchive::new(File::open(path)?)?.extract(temp_dir.path())?;
 
     // Prepare a WorldStats struct to hold the statistics
