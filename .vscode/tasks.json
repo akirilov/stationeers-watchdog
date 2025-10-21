@@ -8,7 +8,7 @@
 				"$rustc"
 			],
 			"group": "build",
-			"label": "rust: cargo build"
+			"label": "build"
 		},
 		{
 			"type": "cargo",
@@ -16,7 +16,8 @@
 			"problemMatcher": [
 				"$rustc"
 			],
-			"label": "rust: cargo run"
+			"label": "run",
+			"args": ["${input:saveDir}"]
 		},
 		{
 			"type": "cargo",
@@ -25,7 +26,7 @@
 				"$rustc"
 			],
 			"group": "build",
-			"label": "rust: cargo clippy"
+			"label": "clippy"
 		},
 		{
 			"type": "cargo",
@@ -34,7 +35,7 @@
 				"$rustc"
 			],
 			"group": "clean",
-			"label": "rust: cargo clean"
+			"label": "clean"
 		},
 		{
 			"type": "cargo",
@@ -43,7 +44,15 @@
 				"$rustc"
 			],
 			"group": "test",
-			"label": "rust: cargo test"
+			"label": "test"
 		}
-	]
+	],
+	 "inputs": [
+        {
+            "id": "saveDir",
+            "type": "promptString",
+            "description": "Path to Stationeers save directory",
+            "default": "./example"
+        }
+    ]
 }
