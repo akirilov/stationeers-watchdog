@@ -1,12 +1,10 @@
+use conv::ValueFrom;
 use quick_xml::{events::Event, Reader};
-use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::error;
 use std::fs::File;
-use std::hash::Hash;
 use tempfile::tempdir;
 use zip::ZipArchive;
-use conv::ValueFrom;
-use std::collections::HashMap;
 
 const WORLD_META_XML: &str = "world_meta.xml";
 const WORLD_XML: &str = "world.xml";
@@ -37,18 +35,23 @@ impl WorldStats {
             total_damage: 0.0,
             players: Vec::new(),
             type_map: HashMap::new(),
-            filename: filename,
+            filename,
         }
     }
 
     pub fn diff(&self, other: &WorldStats) -> Result<WorldStatsDiff> {
         let mut result = WorldStatsDiff {
             date_time: self.date_time - other.date_time,
-            total_things: isize::value_from(self.total_things)? - isize::value_from(other.total_things)?,
-            total_rooms: isize::value_from(self.total_rooms)? - isize::value_from(other.total_rooms)?,
-            total_pipe_networks: isize::value_from(self.total_pipe_networks)? - isize::value_from(other.total_pipe_networks)?,
-            total_cable_networks: isize::value_from(self.total_cable_networks)? - isize::value_from(other.total_cable_networks)?,
-            total_atmospheres: isize::value_from(self.total_atmospheres)? - isize::value_from(other.total_atmospheres)?,
+            total_things: isize::value_from(self.total_things)?
+                - isize::value_from(other.total_things)?,
+            total_rooms: isize::value_from(self.total_rooms)?
+                - isize::value_from(other.total_rooms)?,
+            total_pipe_networks: isize::value_from(self.total_pipe_networks)?
+                - isize::value_from(other.total_pipe_networks)?,
+            total_cable_networks: isize::value_from(self.total_cable_networks)?
+                - isize::value_from(other.total_cable_networks)?,
+            total_atmospheres: isize::value_from(self.total_atmospheres)?
+                - isize::value_from(other.total_atmospheres)?,
             total_damage: self.total_damage - other.total_damage,
             players: Vec::new(),
             type_map: HashMap::new(),
@@ -63,7 +66,10 @@ impl WorldStats {
         for (key, value) in self.type_map.iter() {
             if let Some(other_value) = other.type_map.get(key) {
                 if *value < *other_value {
-                    result.type_map.insert(key.clone(), isize::value_from(*value)? - isize::value_from(*other_value)?);
+                    result.type_map.insert(
+                        key.clone(),
+                        isize::value_from(*value)? - isize::value_from(*other_value)?,
+                    );
                 }
             }
         }
@@ -72,6 +78,7 @@ impl WorldStats {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // We're allowing this for now, as it may be used later
 pub struct WorldStatsDiff {
     pub date_time: usize,
     pub total_things: isize,
@@ -157,11 +164,13 @@ pub fn parse_save_file(path: &str) -> Result<WorldStats> {
                         damage_state = true;
                     }
                     // Look for players
-                    let attributes = String::from_utf8(e.attributes_raw().to_vec())?.trim().to_owned();
+                    let attributes = String::from_utf8(e.attributes_raw().to_vec())?
+                        .trim()
+                        .to_owned();
                     if !attributes.is_empty() && attributes.starts_with("xsi:type") {
                         // Strip the xsi:type attribute and grab the type name
                         let item_type = attributes.split('"').nth(1);
-                        if (item_type.is_none()) {
+                        if item_type.is_none() {
                             return Err("Error parsing xsi:type attribute".into());
                         }
                         let item_type = item_type.unwrap().to_owned();
@@ -177,7 +186,7 @@ pub fn parse_save_file(path: &str) -> Result<WorldStats> {
                     }
                     path_stack.push(text);
                 }
-                Ok(Event::End(e)) => {
+                Ok(Event::End(_)) => {
                     let text = path_stack.pop();
                     if text.is_some() && text.unwrap() == "DamageState" {
                         damage_state = false;
@@ -187,10 +196,10 @@ pub fn parse_save_file(path: &str) -> Result<WorldStats> {
                     let text = e.decode()?.trim().to_owned();
                     match path_stack.last() {
                         Some(s) if s == "CustomName" && get_player_name => {
-                            world_stats.players.push(text.into());
+                            world_stats.players.push(text);
                             get_player_name = false; // Clear the flag after grabbing the name
                         }
-                        Some(s) if damage_state && !text.is_empty()=> {
+                        Some(_) if damage_state && !text.is_empty() => {
                             world_stats.total_damage += text.parse::<f64>()?;
                         }
                         None => (),
