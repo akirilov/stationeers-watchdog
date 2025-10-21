@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::error;
 use std::fs::File;
 use zip::ZipArchive;
+use tempfile::tempdir;
 
 const WORLD_META_XML: &str = "world_meta.xml";
 const WORLD_XML: &str = "world.xml";
@@ -92,9 +93,11 @@ pub struct WorldStatsDiff {
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
+// quick_xml does have an async api, but since we are reading large files, we're generally IO bound which is not threaded anyway,
+// so swapping threads is actually slower than scheduling a blocking read.
 pub fn parse_save_file(path: &str) -> Result<WorldStats> {
     // Create a temporary directory and extract the zip file
-    let temp_dir = tempfile::tempdir()?;
+    let temp_dir = tempdir()?;
     ZipArchive::new(File::open(path)?)?.extract(temp_dir.path())?;
 
     // Prepare a WorldStats struct to hold the statistics

@@ -1,10 +1,10 @@
 mod save_monitor;
 use colored::Colorize;
-use std::env;
-use std::fs;
-use tokio::{self, task};
+use std::env::args;
+use std::fs::read_dir;
+use tokio::{self, task::spawn};
 
-use crate::save_monitor::{WorldStats, parse_save_file};
+use crate::save_monitor::{WorldStats, WorldStatsDiff, parse_save_file};
 
 const ATMOS_WARN_THRESHOLD: isize = -50;
 const ATMOS_ALARM_THRESHOLD: isize = -100;
@@ -13,7 +13,7 @@ const DAMAGE_ALARM_THRESHOLD: f64 = 1000.0;
 const TYPE_WARN_THRESHOLD: isize = -10;
 const TYPE_ALARM_THRESHOLD: isize = -20;
 
-fn pretty_print_diff(diff: save_monitor::WorldStatsDiff) {
+fn pretty_print_diff(diff: WorldStatsDiff) {
     let total_atmospheres = match diff.total_atmospheres {
         n if n < ATMOS_ALARM_THRESHOLD => format!("{n:.2}").red(),
         n if n < ATMOS_WARN_THRESHOLD => format!("{n:.2}").yellow(),
@@ -41,7 +41,7 @@ fn pretty_print_diff(diff: save_monitor::WorldStatsDiff) {
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = args().collect();
     if args.len() < 2 {
         println!("Usage: {} <save_directory>", args[0]);
         return;
@@ -49,7 +49,7 @@ async fn main() {
     let save_dir_path = &args[1];
     let mut saves: Vec<WorldStats> = Vec::new();
     let mut save_handles = Vec::new();
-    let save_dir = fs::read_dir(save_dir_path);
+    let save_dir = read_dir(save_dir_path);
     if save_dir.is_err() {
         println!("Error reading save directory");
         return;
@@ -60,7 +60,7 @@ async fn main() {
             Ok(entry) => {
                 let path = entry.path();
                 if path.is_file() && path.extension().is_some_and(|f| f == "save") {
-                    save_handles.push(task::spawn(async move {
+                    save_handles.push(spawn(async move {
                         parse_save_file(path.to_string_lossy().as_ref())
                     }))
                 }
